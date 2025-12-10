@@ -2,31 +2,29 @@
 <testng-results ignored="0" total="2" passed="2" failed="0" skipped="0">
   <reporter-output>
   </reporter-output>
-  <suite started-at="2025-11-04T12:32:32 IST" name="Surefire suite" finished-at="2025-11-04T12:33:26 IST" duration-ms="54543">
+  <suite started-at="2025-12-10T13:50:54 IST" name="Surefire suite" finished-at="2025-12-10T13:51:40 IST" duration-ms="46353">
     <groups>
     </groups>
-    <test started-at="2025-11-04T12:32:32 IST" name="Surefire test" finished-at="2025-11-04T12:33:26 IST" duration-ms="54543">
+    <test started-at="2025-12-10T13:50:54 IST" name="Surefire test" finished-at="2025-12-10T13:51:40 IST" duration-ms="46353">
       <class name="attendanceTests.AccessControlTests">
-        <test-method signature="testAccessGrantedRecordsRetrieval()[pri:0, instance:attendanceTests.AccessControlTests@255b53dc]" started-at="2025-11-04T12:32:32 IST" name="testAccessGrantedRecordsRetrieval" description="Verify user can export attendance record and send it via email" finished-at="2025-11-04T12:33:26 IST" duration-ms="54492" status="PASS">
+        <test-method signature="testAccessGrantedRecordsRetrieval()[pri:0, instance:attendanceTests.AccessControlTests@157632c9]" started-at="2025-12-10T13:50:54 IST" name="testAccessGrantedRecordsRetrieval" description="Verify user can export attendance record and send it via email" finished-at="2025-12-10T13:51:40 IST" duration-ms="46312" status="PASS">
           <reporter-output>
           </reporter-output>
         </test-method> <!-- testAccessGrantedRecordsRetrieval -->
       </class> <!-- attendanceTests.AccessControlTests -->
-      <class name="baseTestFile.BaseTests">
-        <test-method is-config="true" signature="globalSetUp()[pri:0, instance:baseTestFile.BaseTests@429bd883]" started-at="2025-11-04T12:32:24 IST" name="globalSetUp" finished-at="2025-11-04T12:32:32 IST" duration-ms="8353" status="PASS">
+      <class name="attendanceTests.LoginTests">
+        <test-method is-config="true" signature="globalSetUp()[pri:0, instance:attendanceTests.LoginTests@2ea6137]" started-at="2025-12-10T13:50:46 IST" name="globalSetUp" finished-at="2025-12-10T13:50:54 IST" duration-ms="7974" status="PASS">
           <reporter-output>
           </reporter-output>
         </test-method> <!-- globalSetUp -->
-        <test-method is-config="true" signature="globalTearDown()[pri:0, instance:baseTestFile.BaseTests@429bd883]" started-at="2025-11-04T12:33:26 IST" name="globalTearDown" finished-at="2025-11-04T12:33:27 IST" duration-ms="84" status="PASS">
-          <reporter-output>
-          </reporter-output>
-        </test-method> <!-- globalTearDown -->
-      </class> <!-- baseTestFile.BaseTests -->
-      <class name="attendanceTests.LoginTests">
-        <test-method signature="verifyAccessControlMenuVisibleAfterLogin()[pri:0, instance:attendanceTests.LoginTests@6ee12bac]" started-at="2025-11-04T12:33:26 IST" name="verifyAccessControlMenuVisibleAfterLogin" description="Verify Access Control menu is visible after successful login" finished-at="2025-11-04T12:33:26 IST" duration-ms="35" status="PASS">
+        <test-method signature="verifyAccessControlMenuVisibleAfterLogin()[pri:0, instance:attendanceTests.LoginTests@2ea6137]" started-at="2025-12-10T13:50:54 IST" name="verifyAccessControlMenuVisibleAfterLogin" description="Verify Access Control menu is visible after successful login" finished-at="2025-12-10T13:50:54 IST" duration-ms="26" status="PASS">
           <reporter-output>
           </reporter-output>
         </test-method> <!-- verifyAccessControlMenuVisibleAfterLogin -->
+        <test-method is-config="true" signature="globalTearDown()[pri:0, instance:attendanceTests.LoginTests@2ea6137]" started-at="2025-12-10T13:51:40 IST" name="globalTearDown" finished-at="2025-12-10T13:51:40 IST" duration-ms="91" status="PASS">
+          <reporter-output>
+          </reporter-output>
+        </test-method> <!-- globalTearDown -->
       </class> <!-- attendanceTests.LoginTests -->
     </test> <!-- Surefire test -->
   </suite> <!-- Surefire suite -->

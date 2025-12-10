@@ -47,7 +47,7 @@ public class Login {
     }
 
     // Perform login and go to Access Control
-    public void performLogin(String username, String password) {
+    public void performLogin(String username, String password) throws InterruptedException {
 
         // Fetch username/password from DEBUG env if set
         String debugUsername = System.getenv("DEBUG_USERNAME");

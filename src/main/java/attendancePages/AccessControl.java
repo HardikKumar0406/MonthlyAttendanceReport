@@ -1,8 +1,9 @@
 package attendancePages;
 
-import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.openqa.selenium.*;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
@@ -12,19 +13,24 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import attendanceUtils.ExcelExporter;
 
 public class AccessControl {
+
     private WebDriver driver;
     private WebDriverWait wait;
+
     public LocalDate selectedStartDate;
     public LocalDate selectedEndDate;
+    public LocalDate selectedReportDate;
 
+    // STORE RAW RECORDS HERE
+    public List<ExcelExporter.AttendanceRecord> allRecords = new ArrayList<>();
 
     public AccessControl(WebDriver driver) {
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+        this.wait = new WebDriverWait(driver, java.time.Duration.ofSeconds(20));
         PageFactory.initElements(driver, this);
     }
 
-    // WebElements
+    // ------------------ ELEMENTS ------------------------
     @FindBy(xpath = "(//i[@class='el-submenu__icon-arrow h-icon-angle_down_sm'])[2]")
     private WebElement clickOnSearch;
 
@@ -58,9 +64,6 @@ public class AccessControl {
     @FindBy(xpath = "(//div[@class='drawer-icon'])[1]")
     private WebElement clickOnDrawerIcon;
 
-    @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[18]")
-    private WebElement clickOnAttendanceType;
-
     @FindBy(xpath = "(//i[@class='el-input__icon h-icon-angle_down_sm'])[5]")
     private WebElement clickOnDropDownToChangePagination;
 
@@ -69,233 +72,172 @@ public class AccessControl {
 
     @FindBy(xpath = "(//input[@placeholder='Please Select'])[2]")
     private WebElement chooseTime;
-    
+
     @FindBy(xpath = "(//span[normalize-space()='Yesterday'])[1]")
-    private WebElement clickOnyesterday;
+    private WebElement clickOnYesterday;
+
+    @FindBy(xpath = "(//span[normalize-space()='Last 7 Days'])[1]")
+    private WebElement clickOnLast30Days;
 
     @FindBy(xpath = "(//span[normalize-space()='Custom Time Interval'])[1]")
     private WebElement chooseCustomDate;
-    
-    @FindBy(xpath = "(//button[@type='button'])[68]")
-    private WebElement goToPreviousMonth;
-    
+
     @FindBy(xpath = "(//span[@class='cell'][normalize-space()='1'])[1]")
     private WebElement selectStartDate;
-    
-    @FindBy(xpath = "(//span[contains(text(),'31')])[4]")
-    private WebElement goToPreviousMonthEndDate;
-    
-    @FindBy(xpath = "(//span[contains(text(),'6')])[6]")
+
+    @FindBy(xpath = "(//span[contains(text(),'30')])[5]")
     private WebElement selectEndDate;
-    
-    @FindBy(xpath = "(//i[@class='el-input__icon el-range__icon el-date-editor__icon h-icon-calendar'])[1]")
-    private WebElement chooseDateAgain;
-    
+
     @FindBy(xpath = "(//button[contains(text(),'OK')])[1]")
     private WebElement clickOnOk;
-    
+
     @FindBy(xpath = "/html/body/div[6]/div[2]/div[1]/span[1]/span[1]")
     private WebElement startDateSpan;
 
-    @FindBy(xpath = "/html/body/div[6]/div[2]/div[1]/span[1]/span[4]")
+    @FindBy(xpath = "/html/body/div[6]/div[2]/div[1]/span[4]")
     private WebElement endDateSpan;
-    
+
     @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[9]")
     private WebElement disableSkinSurfaceTemperature;
-    
+
     @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[10]")
     private WebElement disableWearingMaskOrNot;
-    
+
     @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[11]")
-    private WebElement disablecardNumber;
-    
+    private WebElement disableCardNumber;
+
     @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[12]")
     private WebElement disableDepartment;
-    
+
     @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[17]")
-    private WebElement disableAtuthenticationType;
+    private WebElement disableAuthenticationType;
 
-    
-    public LocalDate selectedReportDate;
 
-    
-    // Public to call from test
+    // ========================= DATE SELECTION =============================
+
     public void fetchYesterdayRecords() {
-        wait.until(ExpectedConditions.visibilityOf(chooseTime));
         chooseTime.click();
-        wait.until(ExpectedConditions.visibilityOf(clickOnyesterday));
-        clickOnyesterday.click();
+        clickOnYesterday.click();
+
         selectedReportDate = LocalDate.now().minusDays(1);
-        selectedStartDate = selectedEndDate = selectedReportDate;// Set yesterday
+        selectedStartDate = selectedEndDate = selectedReportDate;
     }
-    
-    public void customedate() throws InterruptedException {
-        wait.until(ExpectedConditions.visibilityOf(chooseTime));
+
+    public void fetchLast30DaysRecords() throws InterruptedException {
         chooseTime.click();
-        wait.until(ExpectedConditions.visibilityOf(chooseCustomDate));
-        chooseCustomDate.click();
-        Thread.sleep(1000);
-        chooseDateAgain.click();
-        wait.until(ExpectedConditions.visibilityOf(goToPreviousMonth));
-        goToPreviousMonth.click();
-        selectStartDate.click();
-        goToPreviousMonthEndDate.click(); // commented in your code
-        selectEndDate.click();
-        clickOnOk.click();
+        Thread.sleep(1000);        
+        clickOnLast30Days.click();
 
-        // Wait for the spans to be visible to get text
-        wait.until(ExpectedConditions.visibilityOf(startDateSpan));
-        wait.until(ExpectedConditions.visibilityOf(endDateSpan));
-
-        String startDateStr = startDateSpan.getText().trim();  // e.g. "2025/05/28"
-        String endDateStr = endDateSpan.getText().trim();      // e.g. "2025/06/04"
-
-        // Parse using appropriate formatter (your format is yyyy/MM/dd)
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd");
-        selectedStartDate = LocalDate.parse(startDateStr, formatter);
-        selectedEndDate = LocalDate.parse(endDateStr, formatter);
-
-        // For backward compatibility
+        selectedStartDate = LocalDate.now().minusDays(30);
+        selectedEndDate = LocalDate.now();
         selectedReportDate = selectedStartDate;
     }
-
 
     public void fetchTodaysRecords() {
         selectedReportDate = LocalDate.now();
         selectedStartDate = selectedEndDate = selectedReportDate;
     }
 
+    // ========================= NAVIGATION =============================
 
-    
     public void navigateToAccessRecordRetrievalPage() throws InterruptedException {
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(4000);
+        Thread.sleep(3000);
         clickOnOK.click();
 
         wait.until(ExpectedConditions.invisibilityOfElementLocated(
-        	    By.cssSelector(".el-loading-mask")
-        	));
-        Thread.sleep(3000);
+                By.cssSelector(".el-loading-mask")));
+
+        Thread.sleep(2000);
         clickOnRefreshIcon.click();
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(3000);
+        Thread.sleep(2000);
 
-        wait.until(ExpectedConditions.visibilityOf(clickOnSearch));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnSearch)).click();
-
-        wait.until(ExpectedConditions.visibilityOf(clickOnAccessRecordRetrieval));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnAccessRecordRetrieval)).click();
+        clickOnSearch.click();
+        clickOnAccessRecordRetrieval.click();
     }
 
+    // ========================= APPLY FILTERS =============================
+
     public void fetchAttendanceRecord() throws InterruptedException {
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(4000);
-        wait.until(ExpectedConditions.visibilityOf(clickOnMore));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnMore));
+    	Thread.sleep(1000);
         JavascriptExecutor js = (JavascriptExecutor) driver;
         js.executeScript("arguments[0].click();", clickOnMore);
-        wait.until(ExpectedConditions.visibilityOf(clickOnChooseAccessStatus));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnChooseAccessStatus)).click();
-
-        wait.until(ExpectedConditions.visibilityOf(selectAccessGrantedOption));
-        wait.until(ExpectedConditions.elementToBeClickable(selectAccessGrantedOption)).click();
-
-        wait.until(ExpectedConditions.elementToBeClickable(searchButton)).click();
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(5000);
+        Thread.sleep(1000);
+        clickOnChooseAccessStatus.click();
+        Thread.sleep(1000);
+        selectAccessGrantedOption.click();
+        Thread.sleep(1000);
+        searchButton.click();
+        Thread.sleep(3000);
+        Thread.sleep(1000);
         getFilteredData.click();
+        Thread.sleep(1000);
         clickOnCheckbox.click();
-//        Thread.sleep(1000);
-//        clickOnAttendanceType.click();
+
         disableSkinSurfaceTemperature.click();
-        disableAtuthenticationType.click();
-        disablecardNumber.click();
+        disableAuthenticationType.click();
+        disableCardNumber.click();
         disableDepartment.click();
         disableWearingMaskOrNot.click();
+
         clickOnDrawerIcon.click();
-        Thread.sleep(1000);
+        Thread.sleep(2000);
+
         clickOnDropDownToChangePagination.click();
         Thread.sleep(1000);
         chooseRowTotalToTen.click();
-        Thread.sleep(2000);
 
-        System.out.println("10 Attendance Record Fetched Successfully.");
+        Thread.sleep(2000);
+        System.out.println("Filters applied. Fetching records...");
     }
 
-    public String getAllRecord(LocalDate reportDate) throws InterruptedException {
-        if (selectedReportDate == null) {
-            throw new IllegalStateException("❌ Report date not set. Call fetchYesterdayRecords() or fetchTodaysRecords() first.");
-        }
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
+    // ========================= FETCH ALL RECORDS =============================
 
+    public void fetchAllRecords() throws InterruptedException {
+
+        allRecords.clear(); // RESET LIST
         int pageNumber = 1;
-        int totalRecordsFetched = 0;
-        List<ExcelExporter.AttendanceRecord> allRecords = new ArrayList<>();
 
         while (true) {
-            System.out.println("Fetching records from page: " + pageNumber);
-            wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".el-table__body tbody tr.el-table__row")));
-            List<WebElement> rows = driver.findElements(By.cssSelector(".el-table__body tbody tr.el-table__row"));
+            wait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector(".el-table__body tbody tr.el-table__row")));
 
-            System.out.println("Total Rows Found on Page " + pageNumber + ": " + rows.size());
+            List<WebElement> rows =
+                    driver.findElements(By.cssSelector(".el-table__body tbody tr.el-table__row"));
 
-            int index = 1;
             for (WebElement row : rows) {
                 List<WebElement> cells = row.findElements(By.cssSelector("td .cell"));
 
-                if (cells.size() >= 8) {
-                    String firstName = cells.get(1).getText().trim();
-                    String lastName = cells.get(2).getText().trim();
-                    String accessTime = cells.get(4).getText().trim();
-                    String checkType = cells.get(8).getText().trim();
+                if (cells.size() < 8) continue;
 
-                    System.out.println("------- Row " + index + " Data (Page " + pageNumber + ") -------");
-                    System.out.println("First Name : " + firstName);
-                    System.out.println("Last Name  : " + lastName);
-                    System.out.println("Access Time  : " + accessTime);
-                    System.out.println("Check Type : " + checkType);
-                    System.out.println("-----------------------------------");
+                String firstName = cells.get(1).getText().trim();
+                String lastName = cells.get(2).getText().trim();
+                String accessTime = cells.get(4).getText().trim();
+                String checkType = cells.get(8).getText().trim();
 
-                    allRecords.add(new ExcelExporter.AttendanceRecord(firstName, lastName, accessTime, checkType));
-                    totalRecordsFetched++;
-                } else {
-                    System.out.println("Row " + index + " skipped due to insufficient columns.");
-                }
-                index++;
+                allRecords.add(new ExcelExporter.AttendanceRecord(firstName, lastName, accessTime, checkType));
             }
 
+            // Check pagination
+            WebElement nextButton;
             try {
-                WebElement nextButton = driver.findElement(By.xpath("(//li[@class='h-icon-angle_right'])[1]"));
-                if (nextButton.getAttribute("class").contains("is-disabled")) {
-                    System.out.println("No more pages. Reached end of pagination.");
-                    break;
-                } else {
-                    wait.until(ExpectedConditions.elementToBeClickable(nextButton)).click();
-                    Thread.sleep(2000);
-                    pageNumber++;
-                    Thread.sleep(500);
-                }
+                nextButton = driver.findElement(By.xpath("(//li[@class='h-icon-angle_right'])[1]"));
             } catch (Exception e) {
-                System.out.println("Next button not found or not clickable. Stopping pagination.");
                 break;
             }
+
+            if (nextButton.getAttribute("class").contains("is-disabled")) break;
+
+            nextButton.click();
+            Thread.sleep(1500);
+            pageNumber++;
         }
 
-        System.out.println("Total attendance records fetched: " + totalRecordsFetched);
-
-        ExcelExporter exporter = new ExcelExporter(selectedStartDate, selectedEndDate);
-        return exporter.writeToExcel(allRecords, selectedReportDate);
+        System.out.println("Total attendance records fetched: " + allRecords.size());
     }
 
+    // ========================= EXPORT TO EXCEL =============================
 
-    private String getCellValue(WebElement row, String columnClass) {
-        try {
-            WebElement cell = row.findElement(By.cssSelector("td[class*='" + columnClass + "'] .cell"));
-            WebElement innerDiv = cell.findElement(By.cssSelector("div"));
-            String value = innerDiv.getAttribute("title");
-            return (value != null && !value.isEmpty()) ? value.trim() : innerDiv.getText().trim();
-        } catch (Exception e) {
-            return "";
-        }
+    public void exportRecordsToExcel(String folderPath) {
+        ExcelExporter.exportAttendance(allRecords, folderPath);
     }
 }

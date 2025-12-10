@@ -4,39 +4,61 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 import attendancePages.AccessControl;
 import attendanceUtils.EmailSender;
+import attendanceUtils.ExcelExporter;
 import baseTestFile.BaseTests;
 
 import java.io.File;
-import java.time.LocalDate;
+import java.util.List;
 
 public class AccessControlTests extends BaseTests {
 
-	@Test(description = "Verify user can export attendance record and send it via email")
-	public void testAccessGrantedRecordsRetrieval() throws InterruptedException {
-	    AccessControl accesscontrol = new AccessControl(driver);
-	    accesscontrol.navigateToAccessRecordRetrievalPage();
-	  //  accesscontrol.fetchTodaysRecords();
-	    accesscontrol.fetchYesterdayRecords();
-	    // Custom date flow
-	   // accesscontrol.customedate(); // MUST set selectedReportDate internally
-	    accesscontrol.fetchAttendanceRecord(); // Must work with the selected date
+    @Test(description = "Verify user can export attendance record and send it via email")
+    public void testAccessGrantedRecordsRetrieval() throws InterruptedException {
 
-	    String exportedFilePath = accesscontrol.getAllRecord(accesscontrol.selectedReportDate);
+        AccessControl accesscontrol = new AccessControl(driver);
 
-	    Assert.assertTrue(new File(exportedFilePath).exists(), "Exported Excel file does not exist!");
+        accesscontrol.navigateToAccessRecordRetrievalPage();
+        accesscontrol.fetchLast30DaysRecords();
+        accesscontrol.fetchAttendanceRecord();
+        accesscontrol.fetchAllRecords();
 
-	    boolean emailSent = EmailSender.sendEmailWithAttachment(
-		    "mukesh@peregrine-it.com",
-		   // "hardik040698@gmail.com",
-		     null,
-	            "Attendance Report",
-	            "Please find the attached attendance report.",
-	            exportedFilePath
-	    );
+        // ⬇ Export records to Excel
+        String folderPath = "/home/peregrine-it/AttendanceExcels/";
+        accesscontrol.exportRecordsToExcel(folderPath);
 
-	    Assert.assertTrue(emailSent, "Email was not sent successfully!");
-	    System.out.println("✅ Test completed successfully.");
-	}
+        // ⬇ Get the most recently generated Excel file
+        File exported = getLatestFile(folderPath);
 
+        Assert.assertNotNull(exported, "Exported Excel file not found!");
+        Assert.assertTrue(exported.exists(), "Excel file path does not exist!");
 
+        // ⬇ Send email
+        boolean emailSent = EmailSender.sendEmailWithAttachment(
+                "hardik040698@gmail.com",
+                null,
+                "Attendance Report",
+                "Please find the attached attendance report.",
+                exported.getAbsolutePath()
+        );
+
+        Assert.assertTrue(emailSent, "Email was not sent successfully!");
+        System.out.println("✅ Test completed successfully.");
+    }
+
+    // ------------------ Helper to Get Latest File ------------------
+    private File getLatestFile(String folderPath) {
+        File folder = new File(folderPath);
+        File[] files = folder.listFiles((dir, name) -> name.endsWith(".xlsx"));
+
+        if (files == null || files.length == 0)
+            return null;
+
+        File latest = files[0];
+        for (File f : files) {
+            if (f.lastModified() > latest.lastModified()) {
+                latest = f;
+            }
+        }
+        return latest;
+    }
 }

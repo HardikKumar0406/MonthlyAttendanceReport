@@ -12,12 +12,11 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class ExcelExporter {
 
-    // POJO
     public static class AttendanceRecord {
-        String firstName;
-        String lastName;
-        String accessTime; // UTC
-        String checkType;
+        public String firstName;
+        public String lastName;
+        public String accessTime;   // Already IST
+        public String checkType;
 
         public AttendanceRecord(String firstName, String lastName, String accessTime, String checkType) {
             this.firstName = firstName;
@@ -27,201 +26,171 @@ public class ExcelExporter {
         }
     }
 
-    private LocalDate selectedStartDate;
-    private LocalDate selectedEndDate;
+    private static final DateTimeFormatter INPUT_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
-    public ExcelExporter(LocalDate startDate, LocalDate endDate) {
-        this.selectedStartDate = startDate;
-        this.selectedEndDate = endDate;
-    }
+    private static final DateTimeFormatter DATE_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    public static String convertUtcToIst(String timeStr) {
-        String envCI = System.getenv("CI");
+    private static final DateTimeFormatter OUTPUT_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-        // If not running in CI, assume time is already in IST
-        if (envCI == null || !envCI.equalsIgnoreCase("true")) {
-            return timeStr;
-        }
+    public static String exportAttendance(List<AttendanceRecord> records, String folderPath) {
 
-        try {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-            LocalDateTime utcDateTime = LocalDateTime.parse(timeStr, formatter);
-            ZonedDateTime utcZoned = utcDateTime.atZone(ZoneOffset.UTC);
-            ZonedDateTime istZoned = utcZoned.withZoneSameInstant(ZoneId.of("Asia/Kolkata"));
-            return istZoned.format(formatter);
-        } catch (Exception e) {
-            System.out.println("❌ Failed to convert UTC to IST for: " + timeStr);
-            return timeStr;
-        }
-    }
+        try (Workbook workbook = new XSSFWorkbook()) {
 
+            // 🎨 FONT STYLES - ONLY TEXT COLOR, NO BACKGROUND
+            Font greenFont = workbook.createFont();
+            greenFont.setColor(IndexedColors.GREEN.getIndex());
+            greenFont.setBold(true);
 
-    public String writeToExcel(List<AttendanceRecord> records, LocalDate reportDate) {
-        System.out.println("📌 Converting accessTime from UTC to IST for reporting.");
+            Font orangeFont = workbook.createFont();
+            orangeFont.setColor(IndexedColors.ORANGE.getIndex());
+            orangeFont.setBold(true);
 
-        Collections.reverse(records);
+            Font redFont = workbook.createFont();
+            redFont.setColor(IndexedColors.RED.getIndex());
+            redFont.setBold(true);
 
-        String[] columns = {"Sr. No.", "First Name", "Last Name", "Access Time", "Check Type", "Attendance Status"};
-        Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("Attendance");
+            Font defaultFont = workbook.createFont();
+            defaultFont.setBold(false);
 
-        Font defaultFont = workbook.createFont();
-        defaultFont.setFontName("Liberation Sans");
-        defaultFont.setFontHeightInPoints((short) 10);
+            CellStyle greenStyle = workbook.createCellStyle();
+            greenStyle.setFont(greenFont);
 
-        Font boldFont = workbook.createFont();
-        boldFont.setFontName("Liberation Sans");
-        boldFont.setFontHeightInPoints((short) 10);
-        boldFont.setBold(true);
+            CellStyle orangeStyle = workbook.createCellStyle();
+            orangeStyle.setFont(orangeFont);
 
-        Font greenFont = workbook.createFont();
-        greenFont.setColor(IndexedColors.GREEN.getIndex());
-        greenFont.setFontHeightInPoints((short) 10);
-        greenFont.setBold(true);
+            CellStyle redStyle = workbook.createCellStyle();
+            redStyle.setFont(redFont);
 
-        Font redFont = workbook.createFont();
-        redFont.setColor(IndexedColors.RED.getIndex());
-        redFont.setFontHeightInPoints((short) 10);
-        redFont.setBold(true);
+            CellStyle defaultStyle = workbook.createCellStyle();
+            defaultStyle.setFont(defaultFont);
 
-        Font orangeFont = workbook.createFont();
-        orangeFont.setColor(IndexedColors.ORANGE.getIndex());
-        orangeFont.setFontHeightInPoints((short) 10);
-        orangeFont.setBold(true);
+            // Group by date
+            Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
 
-        CellStyle headerStyle = workbook.createCellStyle();
-        headerStyle.setFont(boldFont);
+            for (AttendanceRecord rec : records) {
+                LocalDateTime dt = LocalDateTime.parse(rec.accessTime, INPUT_FORMAT);
+                String dateKey = dt.toLocalDate().format(DATE_FORMAT);
+                groupedByDate.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(rec);
+            }
 
-        CellStyle defaultStyle = workbook.createCellStyle();
-        defaultStyle.setFont(defaultFont);
+            for (String date : groupedByDate.keySet()) {
 
-        CellStyle greenStyle = workbook.createCellStyle();
-        greenStyle.setFont(greenFont);
+                Sheet sheet = workbook.createSheet(date);
 
-        CellStyle redStyle = workbook.createCellStyle();
-        redStyle.setFont(redFont);
+                // Header Row
+                Row header = sheet.createRow(0);
+                header.createCell(0).setCellValue("First Name");
+                header.createCell(1).setCellValue("Last Name");
+                header.createCell(2).setCellValue("Access Time (IST)");
+                header.createCell(3).setCellValue("Tag");
+                header.createCell(4).setCellValue("Attendance Status");
 
-        CellStyle orangeStyle = workbook.createCellStyle();
-        orangeStyle.setFont(orangeFont);
+                List<AttendanceRecord> dayRecords = groupedByDate.get(date);
 
-        Row headerRow = sheet.createRow(0);
-        for (int i = 0; i < columns.length; i++) {
-            Cell cell = headerRow.createCell(i);
-            cell.setCellValue(columns[i]);
-            cell.setCellStyle(headerStyle);
-        }
+                // Sort by time
+                dayRecords.sort(Comparator.comparing(r -> LocalDateTime.parse(r.accessTime, INPUT_FORMAT)));
 
-        Set<String> seenCheckIns = new HashSet<>();
-        int rowNum = 1, serial = 1;
+                // Per user grouping
+                Map<String, List<AttendanceRecord>> userSortedMap = new HashMap<>();
 
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-
-        for (AttendanceRecord record : records) {
-            Row row = sheet.createRow(rowNum++);
-            String userKey = record.firstName + "_" + record.lastName;
-
-            String adjustedCheckType = record.checkType;
-            String attendanceStatus = "";
-
-            String formattedAccessTime = convertUtcToIst(record.accessTime);
-
-            try {
-                LocalDateTime istDateTime = LocalDateTime.parse(formattedAccessTime, timeFormatter);
-                LocalTime istTime = istDateTime.toLocalTime();
-
-                if ("Check-In".equalsIgnoreCase(record.checkType)) {
-                    if (!seenCheckIns.contains(userKey)) {
-                        seenCheckIns.add(userKey);
-
-                        if (!istTime.isAfter(LocalTime.of(10, 0))) {
-                            attendanceStatus = "On-time";
-                        } else if (!istTime.isAfter(LocalTime.of(10, 15))) {
-                            attendanceStatus = "Buffer Late";
-                        } else {
-                            attendanceStatus = "Late";
-                        }
-                    } else {
-                        adjustedCheckType = "Break";
-                    }
+                for (AttendanceRecord rec : dayRecords) {
+                    String key = rec.firstName.trim() + "_" + rec.lastName.trim();
+                    userSortedMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
                 }
-            } catch (Exception e) {
-                attendanceStatus = "Invalid Time";
+
+                for (List<AttendanceRecord> list : userSortedMap.values()) {
+                    list.sort(Comparator.comparing(r -> LocalDateTime.parse(r.accessTime, INPUT_FORMAT)));
+                }
+
+                Map<String, Integer> userIndexTracker = new HashMap<>();
+                int rowIndex = 1;
+
+                for (AttendanceRecord rec : dayRecords) {
+
+                    String key = rec.firstName.trim() + "_" + rec.lastName.trim();
+                    List<AttendanceRecord> sortedList = userSortedMap.get(key);
+
+                    int currentIndex = userIndexTracker.getOrDefault(key, 0);
+                    AttendanceRecord sortedRec = sortedList.get(currentIndex);
+
+                    LocalDateTime dt = LocalDateTime.parse(sortedRec.accessTime, INPUT_FORMAT);
+
+                    String tag = "";
+                    String status = "";
+
+                    // TAG LOGIC
+                    if (currentIndex == 0) {
+                        tag = "Clock-in";
+
+                        LocalTime t = dt.toLocalTime();
+                        if (!t.isAfter(LocalTime.of(10, 0)))
+                            status = "On-time";
+                        else if (!t.isAfter(LocalTime.of(10, 15)))
+                            status = "Buffer Late";
+                        else
+                            status = "Late";
+
+                    } else {
+                        if ("Check-Out".equalsIgnoreCase(sortedRec.checkType)) {
+                            tag = "Clock-out";
+                        } else {
+                            tag = "Break";
+                        }
+                    }
+
+                    // Write row
+                    Row row = sheet.createRow(rowIndex++);
+                    row.createCell(0).setCellValue(rec.firstName);
+                    row.createCell(1).setCellValue(rec.lastName);
+                    row.createCell(2).setCellValue(dt.format(OUTPUT_DATETIME));
+                    row.createCell(3).setCellValue(tag);
+
+                    // Status Cell
+                    Cell statusCell = row.createCell(4);
+                    statusCell.setCellValue(status);
+
+                    switch (status) {
+                        case "On-time":
+                            statusCell.setCellStyle(greenStyle);
+                            break;
+
+                        case "Buffer Late":
+                            statusCell.setCellStyle(orangeStyle);
+                            break;
+
+                        case "Late":
+                            statusCell.setCellStyle(redStyle);
+                            break;
+
+                        default:
+                            statusCell.setCellStyle(defaultStyle);
+                    }
+
+                    userIndexTracker.put(key, currentIndex + 1);
+                }
+
+                for (int col = 0; col < 5; col++) sheet.autoSizeColumn(col);
             }
 
-            row.createCell(0).setCellValue(serial++);
-            row.getCell(0).setCellStyle(defaultStyle);
+            // Save file
+            File folder = new File(folderPath);
+            if (!folder.exists()) folder.mkdirs();
 
-            row.createCell(1).setCellValue(record.firstName);
-            row.getCell(1).setCellStyle(defaultStyle);
+            String fileName = "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
 
-            row.createCell(2).setCellValue(record.lastName);
-            row.getCell(2).setCellStyle(defaultStyle);
-
-            row.createCell(3).setCellValue(formattedAccessTime);
-            row.getCell(3).setCellStyle(defaultStyle);
-
-            row.createCell(4).setCellValue(adjustedCheckType);
-            row.getCell(4).setCellStyle(defaultStyle);
-
-            Cell statusCell = row.createCell(5);
-            statusCell.setCellValue(attendanceStatus);
-            switch (attendanceStatus) {
-                case "On-time":
-                    statusCell.setCellStyle(greenStyle);
-                    break;
-                case "Buffer Late":
-                    statusCell.setCellStyle(orangeStyle);
-                    break;
-                case "Late":
-                    statusCell.setCellStyle(redStyle);
-                    break;
-                default:
-                    statusCell.setCellStyle(defaultStyle);
-                    break;
+            try (FileOutputStream out = new FileOutputStream(folderPath + fileName)) {
+                workbook.write(out);
             }
-        }
 
-        for (int i = 0; i < columns.length; i++) {
-            sheet.autoSizeColumn(i);
-        }
+            System.out.println("✔ Excel created successfully: " + folderPath + fileName);
+            return folderPath + fileName;
 
-        String envCI = System.getenv("CI");
-        String basePath = (envCI != null && envCI.equalsIgnoreCase("true"))
-                ? System.getProperty("user.dir") + "/tempExcel/"
-                : "/home/peregrine-it/AttendanceExcels/";
-
-        File directory = new File(basePath);
-        if (!directory.exists()) directory.mkdirs();
-
-        DateTimeFormatter fileFormatter = DateTimeFormatter.ofPattern("dd_MM_yyyy");
-        String fileName;
-        if (selectedStartDate != null && selectedEndDate != null && !selectedStartDate.isEqual(selectedEndDate)) {
-            String startDateStr = selectedStartDate.format(fileFormatter);
-            String endDateStr = selectedEndDate.format(fileFormatter);
-            String startDay = selectedStartDate.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
-            String endDay = selectedEndDate.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
-            fileName = basePath + "AttendanceRecords_" + startDateStr + "_" + startDay +
-                    "_to_" + endDateStr + "_" + endDay + ".xlsx";
-        } else {
-            String formattedDate = reportDate.format(fileFormatter);
-            String dayOfWeek = reportDate.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
-            fileName = basePath + "AttendanceRecords_" + formattedDate + "_" + dayOfWeek + ".xlsx";
-        }
-
-        fileName = fileName.replaceAll("[()\\s]", "_");
-
-        try (FileOutputStream out = new FileOutputStream(fileName)) {
-            workbook.write(out);
         } catch (IOException e) {
-            System.out.println("❌ Failed to write file: " + e.getMessage());
-        } finally {
-            try {
-                workbook.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            e.printStackTrace();
+            return null;
         }
-
-        return fileName;
     }
 }

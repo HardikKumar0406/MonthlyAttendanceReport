@@ -1,21 +1,30 @@
 #!/bin/bash
 
-MAX_RETRIES=8
+MAX_RETRIES=10
 attempt=1
 
 while [ $attempt -le $MAX_RETRIES ]; do
-  echo "🔁 Running test suite - Attempt $attempt of $MAX_RETRIES..."
+  echo "======================================================="
+  echo "🔁 Running Test Suite — Attempt $attempt of $MAX_RETRIES"
+  echo "======================================================="
+
   mvn clean test
   exit_code=$?
 
   if [ $exit_code -eq 0 ]; then
-    echo "✅ Test suite passed on attempt $attempt."
-    exit 0  # ✅ If success, exit immediately — no retry.
+    echo "✅ Test suite passed successfully on attempt $attempt."
+    exit 0
   else
-    echo "❌ Test suite failed on attempt $attempt."
-    ((attempt++))
+    echo "❌ Attempt $attempt failed."
+
+    if [ $attempt -lt $MAX_RETRIES ]; then
+      echo "🔄 Retrying in 3 seconds..."
+      sleep 3
+    fi
+
+    attempt=$((attempt + 1))
   fi
 done
 
-echo "❗ Maximum attempts ($MAX_RETRIES) reached. Suite did not pass."
+echo "❗ All $MAX_RETRIES attempts failed. Exiting."
 exit 1
