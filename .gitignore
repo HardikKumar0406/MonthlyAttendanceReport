@@ -1,0 +1,75 @@
+##############################################
+# Maven / Java Build Artifacts
+##############################################
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.ser
+
+##############################################
+# Eclipse IDE
+##############################################
+.classpath
+.project
+.settings/
+
+##############################################
+# IntelliJ IDEA
+##############################################
+.idea/
+*.iml
+*.iws
+
+##############################################
+# Logs
+##############################################
+*.log
+logs/
+
+##############################################
+# Reports (TestNG, Surefire, ExtentReports)
+##############################################
+test-output/
+surefire-reports/
+extent-reports/
+reports/
+
+##############################################
+# Screenshots (Your project-specific paths)
+##############################################
+/home/peregrine-it/ScreenshotSpaceApp/
+/home/peregrine-it/MlsOnlineProjectScreenshots/
+screenshots/
+
+##############################################
+# Exported Files (Excel, CSV, PDF, etc.)
+##############################################
+/home/peregrine-it/AttendanceExcels/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+
+##############################################
+# Environment / Secrets / Config
+##############################################
+.env
+*.key
+*.pem
+*.p12
+
+##############################################
+# OS / Editor Files
+##############################################
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+##############################################
+# Java Temporary Files
+##############################################
+*.tmp
+*.temp
