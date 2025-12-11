@@ -1,8 +1,9 @@
-name: Run Selenium Tests Daily
+name: Run Selenium Tests Monthly
 
 on:
   schedule:
-    - cron: '30 0 * * 2-6'  # 6:00 AM IST, Tuesday–Saturday
+    # Run at 23:30 UTC on 28–31 of every month → 5:00 AM IST next day
+    - cron: '30 23 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -10,13 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: true
-      # For manual debug in CI
       DEBUG_USERNAME: "lavanya@peregrine-it.com"
       DEBUG_PASSWORD: "Hardik@04"
       EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
       EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
 
     steps:
+      # 0️⃣ Run only if today is 1st in IST (but skip when run manually)
+      - name: Check if IST date is 1st (Skip for manual run)
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          IST_DATE=$(TZ="Asia/Kolkata" date +'%d')
+          echo "Current IST Date: $IST_DATE"
+
+          if [ "$IST_DATE" != "01" ]; then
+            echo "⛔ Not 1st of the month in IST. Stopping workflow."
+            exit 1
+          fi
+
       # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -46,13 +58,13 @@ jobs:
           echo "Working dir: ${{ github.workspace }}"
           env | grep CI
 
-      # 5️⃣ Set up writable directory for Excel export
+      # 5️⃣ Setup writable directory for Excel export
       - name: Set up writable directory for Excel export
         run: |
           mkdir -p ${{ github.workspace }}/tempExcel
           chmod -R 777 ${{ github.workspace }}/tempExcel
           echo "✅ tempExcel directory created with full write permission"
 
-      # 6️⃣ Clean and compile project, run tests
+      # 6️⃣ Clean, compile and run tests
       - name: Clean, compile and run tests
-        run: ./run-with-retries.sh
+        run: ./retry-tests.sh
