@@ -15,20 +15,20 @@ public class ExcelExporter {
     public static class AttendanceRecord {
         public String firstName;
         public String lastName;
-        public String accessTime;   // Time received from API (UTC)
+        public String accessTime;   // Already IST from system
         public String checkType;
 
         public AttendanceRecord(String firstName, String lastName, String accessTime, String checkType) {
             this.firstName = firstName;
             this.lastName = lastName;
-            this.accessTime = accessTime; // UTC timestamp
+            this.accessTime = accessTime; // IST timestamp
             this.checkType = checkType;
         }
     }
 
     // --- FORMATTERS ---
     private static final DateTimeFormatter INPUT_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"); // API format (UTC)
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"); // API format (IST)
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -36,12 +36,9 @@ public class ExcelExporter {
     private static final DateTimeFormatter OUTPUT_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // --- IST Conversion Helper ---
-    private static LocalDateTime convertToIST(String accessTime) {
-        LocalDateTime utcDT = LocalDateTime.parse(accessTime, INPUT_FORMAT);
-        ZonedDateTime utcZdt = utcDT.atZone(ZoneId.of("UTC"));
-        ZonedDateTime istZdt = utcZdt.withZoneSameInstant(ZoneId.of("Asia/Kolkata"));
-        return istZdt.toLocalDateTime();
+    // --- FIXED: NO UTC → IST conversion ---
+    private static LocalDateTime parseIST(String accessTime) {
+        return LocalDateTime.parse(accessTime, INPUT_FORMAT); // Already IST, no shifting
     }
 
     // --- EXPORT METHOD ---
@@ -49,7 +46,7 @@ public class ExcelExporter {
 
         try (Workbook workbook = new XSSFWorkbook()) {
 
-            // 🎨 FONT STYLES (No background, only text color)
+            // 🎨 FONT STYLES
             Font greenFont = workbook.createFont();
             greenFont.setColor(IndexedColors.GREEN.getIndex());
             greenFont.setBold(true);
@@ -81,8 +78,8 @@ public class ExcelExporter {
             Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
 
             for (AttendanceRecord rec : records) {
-                LocalDateTime dtIST = convertToIST(rec.accessTime);
-                String dateKey = dtIST.toLocalDate().format(DATE_FORMAT);
+                LocalDateTime dt = parseIST(rec.accessTime);
+                String dateKey = dt.toLocalDate().format(DATE_FORMAT);
                 groupedByDate.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(rec);
             }
 
@@ -101,10 +98,10 @@ public class ExcelExporter {
 
                 List<AttendanceRecord> dayRecords = groupedByDate.get(date);
 
-                // Sort ISO IST times
-                dayRecords.sort(Comparator.comparing(r -> convertToIST(r.accessTime)));
+                // Sort IST times
+                dayRecords.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
 
-                // Per user grouping
+                // Per-user sorted list
                 Map<String, List<AttendanceRecord>> userSortedMap = new HashMap<>();
 
                 for (AttendanceRecord rec : dayRecords) {
@@ -112,9 +109,9 @@ public class ExcelExporter {
                     userSortedMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
                 }
 
-                // Sort each user's list by IST time
+                // Sort each user's entries
                 for (List<AttendanceRecord> list : userSortedMap.values()) {
-                    list.sort(Comparator.comparing(r -> convertToIST(r.accessTime)));
+                    list.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
                 }
 
                 Map<String, Integer> userIndexTracker = new HashMap<>();
@@ -129,16 +126,16 @@ public class ExcelExporter {
                     int currentIndex = userIndexTracker.getOrDefault(key, 0);
                     AttendanceRecord sortedRec = sortedList.get(currentIndex);
 
-                    LocalDateTime dtIST = convertToIST(sortedRec.accessTime);
+                    LocalDateTime dt = parseIST(sortedRec.accessTime);
 
                     String tag = "";
                     String status = "";
 
                     // TAG / STATUS Logic
-                    if (currentIndex == 0) {  // First entry of the day = Clock-In
+                    if (currentIndex == 0) {  // First entry = Clock-In
                         tag = "Clock-in";
 
-                        LocalTime t = dtIST.toLocalTime();
+                        LocalTime t = dt.toLocalTime();
                         if (!t.isAfter(LocalTime.of(10, 0)))
                             status = "On-time";
                         else if (!t.isAfter(LocalTime.of(10, 15)))
@@ -146,7 +143,7 @@ public class ExcelExporter {
                         else
                             status = "Late";
 
-                    } else { // Any entry after first
+                    } else { // Next entries
                         if ("Check-Out".equalsIgnoreCase(sortedRec.checkType)) {
                             tag = "Clock-out";
                         } else {
@@ -154,14 +151,13 @@ public class ExcelExporter {
                         }
                     }
 
-                    // Write Row
+                    // Write Excel row
                     Row row = sheet.createRow(rowIndex++);
                     row.createCell(0).setCellValue(rec.firstName);
                     row.createCell(1).setCellValue(rec.lastName);
-                    row.createCell(2).setCellValue(dtIST.format(OUTPUT_DATETIME));
+                    row.createCell(2).setCellValue(dt.format(OUTPUT_DATETIME));
                     row.createCell(3).setCellValue(tag);
 
-                    // Status with color
                     Cell statusCell = row.createCell(4);
                     statusCell.setCellValue(status);
 
@@ -182,28 +178,28 @@ public class ExcelExporter {
                     userIndexTracker.put(key, currentIndex + 1);
                 }
 
-                // Auto-size
+                // Auto-size columns
                 for (int col = 0; col < 5; col++) {
                     sheet.autoSizeColumn(col);
                 }
             }
 
-            // --- Ensure Folder Exists ---
+            // --- Ensure folder exists ---
             File folder = new File(folderPath);
             if (!folder.exists()) {
                 folder.mkdirs();
             }
 
-            // File Name
+            // File name
             String fileName = "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
             String fullPath = folder.getAbsolutePath() + File.separator + fileName;
 
-            // Save file
+            // Save Excel
             try (FileOutputStream out = new FileOutputStream(fullPath)) {
                 workbook.write(out);
             }
 
-            System.out.println("✔ Excel created successfully in IST: " + fullPath);
+            System.out.println("✔ Excel created successfully (IST preserved): " + fullPath);
             return fullPath;
 
         } catch (IOException e) {
