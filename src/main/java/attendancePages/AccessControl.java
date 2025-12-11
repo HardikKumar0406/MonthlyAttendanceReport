@@ -196,6 +196,7 @@ public class AccessControl {
 
         allRecords.clear(); // RESET LIST
         int pageNumber = 1;
+        Thread.sleep(2000);
 
         while (true) {
             wait.until(ExpectedConditions.presenceOfElementLocated(
