@@ -1,210 +1,94 @@
 package attendanceUtils;
 
+import jakarta.mail.*;
+import jakarta.mail.internet.*;
+
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Properties;
 
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+public class EmailSender {
 
-public class ExcelExporter {
+    public static boolean sendEmailWithAttachment(String toEmail, String ccEmails, String subject, String body, String filePath) {
+        final String fromEmail = System.getenv("EMAIL_USERNAME");
+        final String password = System.getenv("EMAIL_PASSWORD");
 
-    public static class AttendanceRecord {
-        public String firstName;
-        public String lastName;
-        public String accessTime;   // Already IST from system
-        public String checkType;
-
-        public AttendanceRecord(String firstName, String lastName, String accessTime, String checkType) {
-            this.firstName = firstName;
-            this.lastName = lastName;
-            this.accessTime = accessTime; // IST timestamp
-            this.checkType = checkType;
+        // ✅ Validate email environment variables
+        if (fromEmail == null || fromEmail.trim().isEmpty()) {
+            System.out.println("❌ EMAIL_USERNAME is not set in environment.");
+            return false;
         }
-    }
+        if (password == null || password.trim().isEmpty()) {
+            System.out.println("❌ EMAIL_PASSWORD is not set in environment.");
+            return false;
+        }
 
-    // --- FORMATTERS ---
-    private static final DateTimeFormatter INPUT_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"); // API format (IST)
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            System.out.println("❌ Recipient (toEmail) is null or empty.");
+            return false;
+        }
 
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        // SMTP properties
+        Properties props = new Properties();
+        props.put("mail.smtp.host", "smtp.gmail.com");
+        props.put("mail.smtp.port", "587");
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
 
-    private static final DateTimeFormatter OUTPUT_DATETIME =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        // Session authentication
+        Session session = Session.getInstance(props, new Authenticator() {
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(fromEmail, password);
+            }
+        });
 
-    // --- FIXED: NO UTC → IST conversion ---
-    private static LocalDateTime parseIST(String accessTime) {
-        return LocalDateTime.parse(accessTime, INPUT_FORMAT); // Already IST, no shifting
-    }
+        try {
+            Message message = new MimeMessage(session);
 
-    // --- EXPORT METHOD ---
-    public static String exportAttendance(List<AttendanceRecord> records, String folderPath) {
+            // Sender
+            message.setFrom(new InternetAddress(fromEmail));
 
-        try (Workbook workbook = new XSSFWorkbook()) {
+            // Recipient
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toEmail));
 
-            // 🎨 FONT STYLES
-            Font greenFont = workbook.createFont();
-            greenFont.setColor(IndexedColors.GREEN.getIndex());
-            greenFont.setBold(true);
-
-            Font orangeFont = workbook.createFont();
-            orangeFont.setColor(IndexedColors.ORANGE.getIndex());
-            orangeFont.setBold(true);
-
-            Font redFont = workbook.createFont();
-            redFont.setColor(IndexedColors.RED.getIndex());
-            redFont.setBold(true);
-
-            Font defaultFont = workbook.createFont();
-            defaultFont.setBold(false);
-
-            CellStyle greenStyle = workbook.createCellStyle();
-            greenStyle.setFont(greenFont);
-
-            CellStyle orangeStyle = workbook.createCellStyle();
-            orangeStyle.setFont(orangeFont);
-
-            CellStyle redStyle = workbook.createCellStyle();
-            redStyle.setFont(redFont);
-
-            CellStyle defaultStyle = workbook.createCellStyle();
-            defaultStyle.setFont(defaultFont);
-
-            // --- Group by IST Date ---
-            Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
-
-            for (AttendanceRecord rec : records) {
-                LocalDateTime dt = parseIST(rec.accessTime);
-                String dateKey = dt.toLocalDate().format(DATE_FORMAT);
-                groupedByDate.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(rec);
+            // CC recipients
+            if (ccEmails != null && !ccEmails.trim().isEmpty()) {
+                message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(ccEmails));
             }
 
-            // --- Create Sheets per Date ---
-            for (String date : groupedByDate.keySet()) {
+            // Subject
+            message.setSubject(subject);
 
-                Sheet sheet = workbook.createSheet(date);
+            // Multipart email
+            Multipart multipart = new MimeMultipart();
 
-                // Header
-                Row header = sheet.createRow(0);
-                header.createCell(0).setCellValue("First Name");
-                header.createCell(1).setCellValue("Last Name");
-                header.createCell(2).setCellValue("Access Time (IST)");
-                header.createCell(3).setCellValue("Tag");
-                header.createCell(4).setCellValue("Attendance Status");
+            // Body
+            MimeBodyPart textBodyPart = new MimeBodyPart();
+            textBodyPart.setText(body);
+            multipart.addBodyPart(textBodyPart);
 
-                List<AttendanceRecord> dayRecords = groupedByDate.get(date);
-
-                // Sort IST times
-                dayRecords.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
-
-                // Per-user sorted list
-                Map<String, List<AttendanceRecord>> userSortedMap = new HashMap<>();
-
-                for (AttendanceRecord rec : dayRecords) {
-                    String key = rec.firstName.trim() + "_" + rec.lastName.trim();
-                    userSortedMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
-                }
-
-                // Sort each user's entries
-                for (List<AttendanceRecord> list : userSortedMap.values()) {
-                    list.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
-                }
-
-                Map<String, Integer> userIndexTracker = new HashMap<>();
-                int rowIndex = 1;
-
-                // --- Write Rows ---
-                for (AttendanceRecord rec : dayRecords) {
-
-                    String key = rec.firstName.trim() + "_" + rec.lastName.trim();
-                    List<AttendanceRecord> sortedList = userSortedMap.get(key);
-
-                    int currentIndex = userIndexTracker.getOrDefault(key, 0);
-                    AttendanceRecord sortedRec = sortedList.get(currentIndex);
-
-                    LocalDateTime dt = parseIST(sortedRec.accessTime);
-
-                    String tag = "";
-                    String status = "";
-
-                    // TAG / STATUS Logic
-                    if (currentIndex == 0) {  // First entry = Clock-In
-                        tag = "Clock-in";
-
-                        LocalTime t = dt.toLocalTime();
-                        if (!t.isAfter(LocalTime.of(10, 0)))
-                            status = "On-time";
-                        else if (!t.isAfter(LocalTime.of(10, 15)))
-                            status = "Buffer Late";
-                        else
-                            status = "Late";
-
-                    } else { // Next entries
-                        if ("Check-Out".equalsIgnoreCase(sortedRec.checkType)) {
-                            tag = "Clock-out";
-                        } else {
-                            tag = "Break";
-                        }
-                    }
-
-                    // Write Excel row
-                    Row row = sheet.createRow(rowIndex++);
-                    row.createCell(0).setCellValue(rec.firstName);
-                    row.createCell(1).setCellValue(rec.lastName);
-                    row.createCell(2).setCellValue(dt.format(OUTPUT_DATETIME));
-                    row.createCell(3).setCellValue(tag);
-
-                    Cell statusCell = row.createCell(4);
-                    statusCell.setCellValue(status);
-
-                    switch (status) {
-                        case "On-time":
-                            statusCell.setCellStyle(greenStyle);
-                            break;
-                        case "Buffer Late":
-                            statusCell.setCellStyle(orangeStyle);
-                            break;
-                        case "Late":
-                            statusCell.setCellStyle(redStyle);
-                            break;
-                        default:
-                            statusCell.setCellStyle(defaultStyle);
-                    }
-
-                    userIndexTracker.put(key, currentIndex + 1);
-                }
-
-                // Auto-size columns
-                for (int col = 0; col < 5; col++) {
-                    sheet.autoSizeColumn(col);
-                }
+            // Attachment
+            if (filePath != null && new File(filePath).exists()) {
+                MimeBodyPart attachmentBodyPart = new MimeBodyPart();
+                attachmentBodyPart.attachFile(new File(filePath));
+                multipart.addBodyPart(attachmentBodyPart);
+                System.out.println("📎 Attached file: " + filePath);
+            } else {
+                System.out.println("⚠️ Attachment skipped: file path invalid or file doesn't exist.");
             }
 
-            // --- Ensure folder exists ---
-            File folder = new File(folderPath);
-            if (!folder.exists()) {
-                folder.mkdirs();
-            }
+            // Final message content
+            message.setContent(multipart);
 
-            // File name
-            String fileName = "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
-            String fullPath = folder.getAbsolutePath() + File.separator + fileName;
+            // Send email
+            Transport.send(message);
 
-            // Save Excel
-            try (FileOutputStream out = new FileOutputStream(fullPath)) {
-                workbook.write(out);
-            }
+            System.out.println("✅ Email sent successfully to: " + toEmail);
+            return true;
 
-            System.out.println("✔ Excel created successfully (IST preserved): " + fullPath);
-            return fullPath;
-
-        } catch (IOException e) {
+        } catch (Exception e) {
+            System.out.println("❌ Failed to send email: " + e.getMessage());
             e.printStackTrace();
-            return null;
+            return false;
         }
     }
 }
