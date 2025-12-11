@@ -4,11 +4,9 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 import attendancePages.AccessControl;
 import attendanceUtils.EmailSender;
-import attendanceUtils.ExcelExporter;
 import baseTestFile.BaseTests;
 
 import java.io.File;
-import java.util.List;
 
 public class AccessControlTests extends BaseTests {
 
@@ -22,17 +20,19 @@ public class AccessControlTests extends BaseTests {
         accesscontrol.fetchAttendanceRecord();
         accesscontrol.fetchAllRecords();
 
-        // ⬇ Export records to Excel
-        String folderPath = "/home/peregrine-it/AttendanceExcels/";
+        // ✅ GitHub Actions + Local machine safe folder path 
+        String folderPath = System.getProperty("user.dir") + "/AttendanceExcels/";
+
+        // Export Excel
         accesscontrol.exportRecordsToExcel(folderPath);
 
-        // ⬇ Get the most recently generated Excel file
+        // Get latest created Excel file
         File exported = getLatestFile(folderPath);
 
         Assert.assertNotNull(exported, "Exported Excel file not found!");
         Assert.assertTrue(exported.exists(), "Excel file path does not exist!");
 
-        // ⬇ Send email
+        // Send email with attachment
         boolean emailSent = EmailSender.sendEmailWithAttachment(
                 "hardik040698@gmail.com",
                 null,
@@ -45,7 +45,7 @@ public class AccessControlTests extends BaseTests {
         System.out.println("✅ Test completed successfully.");
     }
 
-    // ------------------ Helper to Get Latest File ------------------
+    // ------------------ Helper: Get Latest Excel File ------------------
     private File getLatestFile(String folderPath) {
         File folder = new File(folderPath);
         File[] files = folder.listFiles((dir, name) -> name.endsWith(".xlsx"));
