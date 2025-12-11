@@ -101,6 +101,7 @@ public class ExcelExporter {
                     userSortedMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
                 }
 
+                // Sort each user's list by time
                 for (List<AttendanceRecord> list : userSortedMap.values()) {
                     list.sort(Comparator.comparing(r -> LocalDateTime.parse(r.accessTime, INPUT_FORMAT)));
                 }
@@ -121,7 +122,7 @@ public class ExcelExporter {
                     String tag = "";
                     String status = "";
 
-                    // TAG LOGIC
+                    // TAG / STATUS LOGIC
                     if (currentIndex == 0) {
                         tag = "Clock-in";
 
@@ -148,7 +149,6 @@ public class ExcelExporter {
                     row.createCell(2).setCellValue(dt.format(OUTPUT_DATETIME));
                     row.createCell(3).setCellValue(tag);
 
-                    // Status Cell
                     Cell statusCell = row.createCell(4);
                     statusCell.setCellValue(status);
 
@@ -172,21 +172,30 @@ public class ExcelExporter {
                     userIndexTracker.put(key, currentIndex + 1);
                 }
 
-                for (int col = 0; col < 5; col++) sheet.autoSizeColumn(col);
+                for (int col = 0; col < 5; col++) {
+                    sheet.autoSizeColumn(col);
+                }
             }
 
-            // Save file
+            // ✅ FIX: Create folder safely (works in GitHub Actions)
             File folder = new File(folderPath);
-            if (!folder.exists()) folder.mkdirs();
+            if (!folder.exists()) {
+                folder.mkdirs();
+            }
 
+            // File name
             String fileName = "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
 
-            try (FileOutputStream out = new FileOutputStream(folderPath + fileName)) {
+            // ✅ FIX: Always safe path joining
+            String fullPath = folder.getAbsolutePath() + File.separator + fileName;
+
+            // Save file
+            try (FileOutputStream out = new FileOutputStream(fullPath)) {
                 workbook.write(out);
             }
 
-            System.out.println("✔ Excel created successfully: " + folderPath + fileName);
-            return folderPath + fileName;
+            System.out.println("✔ Excel created successfully: " + fullPath);
+            return fullPath;
 
         } catch (IOException e) {
             e.printStackTrace();
