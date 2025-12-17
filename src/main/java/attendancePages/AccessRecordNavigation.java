@@ -2,20 +2,22 @@ package attendancePages;
 
 import java.time.Duration;
 
-import org.openqa.selenium.By;
-import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 public class AccessRecordNavigation {
+
     private WebDriver driver;
     private WebDriverWait wait;
 
-    // Relevant WebElements for navigation
+    // ===================== LOADER =====================
+    private static final By LOADER =
+            By.cssSelector("div.el-loading-mask");
+
+    // ===================== ELEMENTS =====================
     @FindBy(xpath = "(//i[@class='el-submenu__icon-arrow h-icon-angle_down_sm'])[2]")
     private WebElement clickOnSearch;
 
@@ -37,20 +39,8 @@ public class AccessRecordNavigation {
     @FindBy(xpath = "(//i[@class='h-icon-refresh'])[1]")
     private WebElement clickOnRefreshIcon;
 
-    @FindBy(xpath = "//*[@id=\"header\"]/div[5]/div[1]/button")
+    @FindBy(xpath = "//*[@id='header']/div[5]/div[1]/button")
     private WebElement clickOnOK;
-
-    @FindBy(xpath = "(//button[@title='Custom Column Item'])[1]")
-    private WebElement getFilteredData;
-
-    @FindBy(xpath = "(//span[@class='el-checkbox__inner'])[4]")
-    private WebElement clickOnCheckbox;
-
-    @FindBy(xpath = "(//div[@class='drawer-icon'])[1]")
-    private WebElement clickOnDrawerIcon;
-
-    @FindBy(xpath = "//span[@class='el-checkbox__inner']")
-    private WebElement clickOnAttendanceType;
 
     @FindBy(xpath = "(//i[@class='el-input__icon h-icon-angle_down_sm'])[5]")
     private WebElement clickOnDropDownToChangePagination;
@@ -58,54 +48,64 @@ public class AccessRecordNavigation {
     @FindBy(xpath = "(//span[@class='item-text-style'][normalize-space()='10'])[2]")
     private WebElement chooseRowTotalToTen;
 
+    // ===================== CONSTRUCTOR =====================
     public AccessRecordNavigation(WebDriver driver) {
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         PageFactory.initElements(driver, this);
     }
 
-    public void navigateToAccessRecordRetrievalPage() throws InterruptedException {
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(6000);
-        clickOnOK.click();
-        clickOnRefreshIcon.click();
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
-        Thread.sleep(4000);
-
-        wait.until(ExpectedConditions.visibilityOf(clickOnSearch));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnSearch)).click();
-
-        wait.until(ExpectedConditions.visibilityOf(clickOnAccessRecordRetrieval));
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnAccessRecordRetrieval)).click();
+    // ===================== COMMON UTILS =====================
+    private void waitForLoaderToDisappear() {
+        wait.until(ExpectedConditions.invisibilityOfElementLocated(LOADER));
     }
 
+    private void safeClick(WebElement element) {
+        waitForLoaderToDisappear();
+        wait.until(ExpectedConditions.visibilityOf(element));
+        wait.until(ExpectedConditions.elementToBeClickable(element));
+
+        ((JavascriptExecutor) driver)
+                .executeScript("arguments[0].scrollIntoView({block:'center'});", element);
+
+        ((JavascriptExecutor) driver)
+                .executeScript("arguments[0].click();", element);
+    }
+
+    // ===================== NAVIGATION =====================
+    public void navigateToAccessRecordRetrievalPage() {
+
+        // Initial loader
+        waitForLoaderToDisappear();
+
+        // OK popup
+        safeClick(clickOnOK);
+
+        // Refresh
+        waitForLoaderToDisappear();
+        safeClick(clickOnRefreshIcon);
+
+        // Navigate menu
+        safeClick(clickOnSearch);
+        safeClick(clickOnAccessRecordRetrieval);
+    }
+
+    // ===================== FETCH RECORDS =====================
     public void fetchAttendanceRecord() {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
-        JavascriptExecutor js = (JavascriptExecutor) driver;
 
-        // Wait for loader to disappear
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
+        waitForLoaderToDisappear();
 
-        // Open filters
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnMore));
-        js.executeScript("arguments[0].click();", clickOnMore);
+        safeClick(clickOnMore);
+        safeClick(clickOnChooseAccessStatus);
+        safeClick(selectAccessGrantedOption);
 
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnChooseAccessStatus)).click();
-        wait.until(ExpectedConditions.elementToBeClickable(selectAccessGrantedOption)).click();
+        safeClick(searchButton);
 
-        // Search
-        wait.until(ExpectedConditions.elementToBeClickable(searchButton)).click();
-      //  wait.until(ExpectedConditions.invisibilityOfElementLocated(By.xpath("(//span[@class='path1'])[1]")));
+        waitForLoaderToDisappear();
 
-        // Select filtered data
-   //     wait.until(ExpectedConditions.elementToBeClickable(getFilteredData)).click();
-        // Drawer & pagination
-    //    wait.until(ExpectedConditions.elementToBeClickable(clickOnDrawerIcon)).click();
-        wait.until(ExpectedConditions.elementToBeClickable(clickOnDropDownToChangePagination)).click();
-        wait.until(ExpectedConditions.elementToBeClickable(chooseRowTotalToTen)).click();
+        safeClick(clickOnDropDownToChangePagination);
+        safeClick(chooseRowTotalToTen);
 
-        System.out.println("10 Attendance Record Fetched Successfully.");
+        System.out.println("✅ Attendance records fetched successfully.");
     }
-
 }
-
