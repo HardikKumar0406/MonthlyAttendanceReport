@@ -13,11 +13,11 @@ public class AccessRecordNavigation {
     private WebDriver driver;
     private WebDriverWait wait;
 
-    // ===================== LOADER =====================
-    private static final By LOADER =
-            By.cssSelector("div.el-loading-mask");
+    private static final By LOADER_MASK =
+            By.xpath("//div[contains(@class,'el-loading-mask')]");
 
-    // ===================== ELEMENTS =====================
+    // ---------- Elements ----------
+
     @FindBy(xpath = "(//i[@class='el-submenu__icon-arrow h-icon-angle_down_sm'])[2]")
     private WebElement clickOnSearch;
 
@@ -48,64 +48,73 @@ public class AccessRecordNavigation {
     @FindBy(xpath = "(//span[@class='item-text-style'][normalize-space()='10'])[2]")
     private WebElement chooseRowTotalToTen;
 
-    // ===================== CONSTRUCTOR =====================
+    // ---------- Constructor ----------
+
     public AccessRecordNavigation(WebDriver driver) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         PageFactory.initElements(driver, this);
     }
 
-    // ===================== COMMON UTILS =====================
+    // ---------- Common Utilities ----------
+
     private void waitForLoaderToDisappear() {
-        wait.until(ExpectedConditions.invisibilityOfElementLocated(LOADER));
+        wait.until(ExpectedConditions.invisibilityOfElementLocated(LOADER_MASK));
     }
 
     private void safeClick(WebElement element) {
-        waitForLoaderToDisappear();
-        wait.until(ExpectedConditions.visibilityOf(element));
-        wait.until(ExpectedConditions.elementToBeClickable(element));
-
-        ((JavascriptExecutor) driver)
-                .executeScript("arguments[0].scrollIntoView({block:'center'});", element);
-
-        ((JavascriptExecutor) driver)
-                .executeScript("arguments[0].click();", element);
+        try {
+            waitForLoaderToDisappear();
+            wait.until(ExpectedConditions.elementToBeClickable(element)).click();
+        } catch (ElementClickInterceptedException | TimeoutException e) {
+            // Fallback to JS click (CI-safe)
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            js.executeScript("arguments[0].click();", element);
+        }
     }
 
-    // ===================== NAVIGATION =====================
+    // ---------- Navigation ----------
+
     public void navigateToAccessRecordRetrievalPage() {
 
-        // Initial loader
         waitForLoaderToDisappear();
 
-        // OK popup
-        safeClick(clickOnOK);
+        // Handle OK popup safely
+        try {
+            safeClick(clickOnOK);
+        } catch (Exception ignored) {
+            // OK popup may not appear every time
+        }
 
         // Refresh
-        waitForLoaderToDisappear();
         safeClick(clickOnRefreshIcon);
+        waitForLoaderToDisappear();
 
-        // Navigate menu
+        // Navigate to menu
         safeClick(clickOnSearch);
         safeClick(clickOnAccessRecordRetrieval);
     }
 
-    // ===================== FETCH RECORDS =====================
+    // ---------- Fetch Records ----------
+
     public void fetchAttendanceRecord() {
 
         waitForLoaderToDisappear();
 
+        // Open filters
         safeClick(clickOnMore);
+
         safeClick(clickOnChooseAccessStatus);
         safeClick(selectAccessGrantedOption);
 
+        // Search
         safeClick(searchButton);
-
         waitForLoaderToDisappear();
 
+        // Pagination
         safeClick(clickOnDropDownToChangePagination);
         safeClick(chooseRowTotalToTen);
 
-        System.out.println("✅ Attendance records fetched successfully.");
+        System.out.println("✅ 10 Attendance Records fetched successfully.");
     }
 }
