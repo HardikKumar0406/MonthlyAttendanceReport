@@ -76,7 +76,7 @@ public class AccessControl {
     @FindBy(xpath = "(//span[normalize-space()='Yesterday'])[1]")
     private WebElement clickOnYesterday;
 
-    @FindBy(xpath = "(//span[normalize-space()='Last 7 Days'])[1]")
+    @FindBy(xpath = "(//span[normalize-space()='Last 30 Days'])[1]")
     private WebElement clickOnLast30Days;
 
     @FindBy(xpath = "(//span[normalize-space()='Custom Time Interval'])[1]")
