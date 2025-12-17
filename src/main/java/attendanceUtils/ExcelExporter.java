@@ -12,23 +12,25 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class ExcelExporter {
 
+    // ===================== MODEL =====================
     public static class AttendanceRecord {
         public String firstName;
         public String lastName;
-        public String accessTime;   // Already IST from system
+        public String accessTime;   // API timestamp (ALREADY CORRECT LOCAL TIME)
         public String checkType;
 
-        public AttendanceRecord(String firstName, String lastName, String accessTime, String checkType) {
+        public AttendanceRecord(String firstName, String lastName,
+                                String accessTime, String checkType) {
             this.firstName = firstName;
             this.lastName = lastName;
-            this.accessTime = accessTime; // IST timestamp
+            this.accessTime = accessTime;
             this.checkType = checkType;
         }
     }
 
-    // --- FORMATTERS ---
+    // ===================== FORMATTERS =====================
     private static final DateTimeFormatter INPUT_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"); // API format (IST)
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -36,31 +38,34 @@ public class ExcelExporter {
     private static final DateTimeFormatter OUTPUT_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // --- FIXED: NO UTC → IST conversion ---
-    private static LocalDateTime parseIST(String accessTime) {
-        return LocalDateTime.parse(accessTime, INPUT_FORMAT); // Already IST, no shifting
+    // ===================== TIME PARSER =====================
+    /**
+     * NO conversion.
+     * Uses API time as-is.
+     */
+    private static LocalDateTime parseTime(String accessTime) {
+        return LocalDateTime.parse(accessTime, INPUT_FORMAT);
     }
 
-    // --- EXPORT METHOD ---
+    // ===================== EXPORT METHOD =====================
     public static String exportAttendance(List<AttendanceRecord> records, String folderPath) {
 
         try (Workbook workbook = new XSSFWorkbook()) {
 
-            // 🎨 FONT STYLES
+            // ---------- Fonts ----------
             Font greenFont = workbook.createFont();
-            greenFont.setColor(IndexedColors.GREEN.getIndex());
             greenFont.setBold(true);
+            greenFont.setColor(IndexedColors.GREEN.getIndex());
 
             Font orangeFont = workbook.createFont();
-            orangeFont.setColor(IndexedColors.ORANGE.getIndex());
             orangeFont.setBold(true);
+            orangeFont.setColor(IndexedColors.ORANGE.getIndex());
 
             Font redFont = workbook.createFont();
-            redFont.setColor(IndexedColors.RED.getIndex());
             redFont.setBold(true);
+            redFont.setColor(IndexedColors.RED.getIndex());
 
             Font defaultFont = workbook.createFont();
-            defaultFont.setBold(false);
 
             CellStyle greenStyle = workbook.createCellStyle();
             greenStyle.setFont(greenFont);
@@ -74,17 +79,22 @@ public class ExcelExporter {
             CellStyle defaultStyle = workbook.createCellStyle();
             defaultStyle.setFont(defaultFont);
 
-            // --- Group by IST Date ---
+            // ---------- Group records by DATE ----------
             Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
 
             for (AttendanceRecord rec : records) {
-                LocalDateTime dt = parseIST(rec.accessTime);
+                LocalDateTime dt = parseTime(rec.accessTime);
                 String dateKey = dt.toLocalDate().format(DATE_FORMAT);
-                groupedByDate.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(rec);
+                groupedByDate
+                        .computeIfAbsent(dateKey, k -> new ArrayList<>())
+                        .add(rec);
             }
 
-            // --- Create Sheets per Date ---
-            for (String date : groupedByDate.keySet()) {
+            // ---------- Create Sheets ----------
+            for (Map.Entry<String, List<AttendanceRecord>> entry : groupedByDate.entrySet()) {
+
+                String date = entry.getKey();
+                List<AttendanceRecord> dayRecords = entry.getValue();
 
                 Sheet sheet = workbook.createSheet(date);
 
@@ -92,66 +102,57 @@ public class ExcelExporter {
                 Row header = sheet.createRow(0);
                 header.createCell(0).setCellValue("First Name");
                 header.createCell(1).setCellValue("Last Name");
-                header.createCell(2).setCellValue("Access Time (IST)");
+                header.createCell(2).setCellValue("Access Time");
                 header.createCell(3).setCellValue("Tag");
                 header.createCell(4).setCellValue("Attendance Status");
 
-                List<AttendanceRecord> dayRecords = groupedByDate.get(date);
+                // Sort by time
+                dayRecords.sort(Comparator.comparing(r -> parseTime(r.accessTime)));
 
-                // Sort IST times
-                dayRecords.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
-
-                // Per-user sorted list
-                Map<String, List<AttendanceRecord>> userSortedMap = new HashMap<>();
+                // Per-user ordering
+                Map<String, List<AttendanceRecord>> userMap = new HashMap<>();
 
                 for (AttendanceRecord rec : dayRecords) {
                     String key = rec.firstName.trim() + "_" + rec.lastName.trim();
-                    userSortedMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
+                    userMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
                 }
 
-                // Sort each user's entries
-                for (List<AttendanceRecord> list : userSortedMap.values()) {
-                    list.sort(Comparator.comparing(r -> parseIST(r.accessTime)));
-                }
+                userMap.values()
+                       .forEach(list ->
+                           list.sort(Comparator.comparing(r -> parseTime(r.accessTime)))
+                       );
 
-                Map<String, Integer> userIndexTracker = new HashMap<>();
+                Map<String, Integer> userIndex = new HashMap<>();
                 int rowIndex = 1;
 
-                // --- Write Rows ---
+                // ---------- Write Rows ----------
                 for (AttendanceRecord rec : dayRecords) {
 
                     String key = rec.firstName.trim() + "_" + rec.lastName.trim();
-                    List<AttendanceRecord> sortedList = userSortedMap.get(key);
+                    int index = userIndex.getOrDefault(key, 0);
 
-                    int currentIndex = userIndexTracker.getOrDefault(key, 0);
-                    AttendanceRecord sortedRec = sortedList.get(currentIndex);
+                    AttendanceRecord orderedRec = userMap.get(key).get(index);
+                    LocalDateTime dt = parseTime(orderedRec.accessTime);
 
-                    LocalDateTime dt = parseIST(sortedRec.accessTime);
-
-                    String tag = "";
+                    String tag;
                     String status = "";
 
-                    // TAG / STATUS Logic
-                    if (currentIndex == 0) {  // First entry = Clock-In
+                    if (index == 0) {
                         tag = "Clock-in";
 
-                        LocalTime t = dt.toLocalTime();
-                        if (!t.isAfter(LocalTime.of(10, 0)))
+                        LocalTime time = dt.toLocalTime();
+                        if (!time.isAfter(LocalTime.of(10, 0)))
                             status = "On-time";
-                        else if (!t.isAfter(LocalTime.of(10, 15)))
+                        else if (!time.isAfter(LocalTime.of(10, 15)))
                             status = "Buffer Late";
                         else
                             status = "Late";
 
-                    } else { // Next entries
-                        if ("Check-Out".equalsIgnoreCase(sortedRec.checkType)) {
-                            tag = "Clock-out";
-                        } else {
-                            tag = "Break";
-                        }
+                    } else {
+                        tag = "Check-Out".equalsIgnoreCase(orderedRec.checkType)
+                                ? "Clock-out" : "Break";
                     }
 
-                    // Write Excel row
                     Row row = sheet.createRow(rowIndex++);
                     row.createCell(0).setCellValue(rec.firstName);
                     row.createCell(1).setCellValue(rec.lastName);
@@ -175,32 +176,28 @@ public class ExcelExporter {
                             statusCell.setCellStyle(defaultStyle);
                     }
 
-                    userIndexTracker.put(key, currentIndex + 1);
+                    userIndex.put(key, index + 1);
                 }
 
-                // Auto-size columns
-                for (int col = 0; col < 5; col++) {
-                    sheet.autoSizeColumn(col);
+                for (int i = 0; i < 5; i++) {
+                    sheet.autoSizeColumn(i);
                 }
             }
 
-            // --- Ensure folder exists ---
+            // ---------- Save File ----------
             File folder = new File(folderPath);
-            if (!folder.exists()) {
-                folder.mkdirs();
+            if (!folder.exists()) folder.mkdirs();
+
+            String filePath = folder.getAbsolutePath()
+                    + File.separator
+                    + "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
+
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                workbook.write(fos);
             }
 
-            // File name
-            String fileName = "AttendanceRecords_" + System.currentTimeMillis() + ".xlsx";
-            String fullPath = folder.getAbsolutePath() + File.separator + fileName;
-
-            // Save Excel
-            try (FileOutputStream out = new FileOutputStream(fullPath)) {
-                workbook.write(out);
-            }
-
-            System.out.println("✔ Excel created successfully (IST preserved): " + fullPath);
-            return fullPath;
+            System.out.println("✔ Excel created successfully (NO time conversion): " + filePath);
+            return filePath;
 
         } catch (IOException e) {
             e.printStackTrace();
