@@ -16,7 +16,7 @@ public class ExcelExporter {
     public static class AttendanceRecord {
         public String firstName;
         public String lastName;
-        public String accessTime;   // API timestamp (ALREADY CORRECT LOCAL TIME)
+        public String accessTime;   // API timestamp
         public String checkType;
 
         public AttendanceRecord(String firstName, String lastName,
@@ -38,13 +38,29 @@ public class ExcelExporter {
     private static final DateTimeFormatter OUTPUT_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // ===================== TIME PARSER =====================
+    // ===================== ENV DETECTION =====================
     /**
-     * NO conversion.
-     * Uses API time as-is.
+     * GitHub Actions always sets GITHUB_ACTIONS=true
      */
-    private static LocalDateTime parseTime(String accessTime) {
-        return LocalDateTime.parse(accessTime, INPUT_FORMAT);
+    private static final boolean IS_CLI_RUN =
+            "true".equalsIgnoreCase(System.getenv("GITHUB_ACTIONS"));
+
+    // ===================== TIME HANDLER =====================
+    /**
+     * Local run  → use time as-is
+     * CLI / CI   → add +5:30 hours
+     */
+    private static LocalDateTime resolveTime(String accessTime) {
+
+        LocalDateTime dt = LocalDateTime.parse(accessTime, INPUT_FORMAT);
+
+        if (IS_CLI_RUN) {
+            // Add IST offset (+5:30)
+            return dt.plusMinutes(330);
+        }
+
+        // Local run → no change
+        return dt;
     }
 
     // ===================== EXPORT METHOD =====================
@@ -83,7 +99,7 @@ public class ExcelExporter {
             Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
 
             for (AttendanceRecord rec : records) {
-                LocalDateTime dt = parseTime(rec.accessTime);
+                LocalDateTime dt = resolveTime(rec.accessTime);
                 String dateKey = dt.toLocalDate().format(DATE_FORMAT);
                 groupedByDate
                         .computeIfAbsent(dateKey, k -> new ArrayList<>())
@@ -102,12 +118,12 @@ public class ExcelExporter {
                 Row header = sheet.createRow(0);
                 header.createCell(0).setCellValue("First Name");
                 header.createCell(1).setCellValue("Last Name");
-                header.createCell(2).setCellValue("Access Time");
+                header.createCell(2).setCellValue("Access Time (IST)");
                 header.createCell(3).setCellValue("Tag");
                 header.createCell(4).setCellValue("Attendance Status");
 
-                // Sort by time
-                dayRecords.sort(Comparator.comparing(r -> parseTime(r.accessTime)));
+                // Sort by resolved time
+                dayRecords.sort(Comparator.comparing(r -> resolveTime(r.accessTime)));
 
                 // Per-user ordering
                 Map<String, List<AttendanceRecord>> userMap = new HashMap<>();
@@ -119,7 +135,7 @@ public class ExcelExporter {
 
                 userMap.values()
                        .forEach(list ->
-                           list.sort(Comparator.comparing(r -> parseTime(r.accessTime)))
+                           list.sort(Comparator.comparing(r -> resolveTime(r.accessTime)))
                        );
 
                 Map<String, Integer> userIndex = new HashMap<>();
@@ -132,7 +148,7 @@ public class ExcelExporter {
                     int index = userIndex.getOrDefault(key, 0);
 
                     AttendanceRecord orderedRec = userMap.get(key).get(index);
-                    LocalDateTime dt = parseTime(orderedRec.accessTime);
+                    LocalDateTime dt = resolveTime(orderedRec.accessTime);
 
                     String tag;
                     String status = "";
@@ -196,7 +212,10 @@ public class ExcelExporter {
                 workbook.write(fos);
             }
 
-            System.out.println("✔ Excel created successfully (NO time conversion): " + filePath);
+            System.out.println("✔ Excel created successfully"
+                    + (IS_CLI_RUN ? " (CLI +5:30 applied)" : " (Local run)")
+                    + ": " + filePath);
+
             return filePath;
 
         } catch (IOException e) {
