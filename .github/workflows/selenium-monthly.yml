@@ -1,9 +1,10 @@
-name: Run Selenium Tests Monthly
+name: Run Selenium Tests - Last Day of Month (8 PM IST)
 
 on:
   schedule:
-    # Run at 23:30 UTC on 28–31 of every month → 5:00 AM IST next day
-    - cron: '30 23 28-31 * *'
+    # 14:30 UTC = 8:00 PM IST
+    # Run on 28–31, validation will ensure LAST DAY only
+    - cron: '30 14 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -17,17 +18,23 @@ jobs:
       EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
 
     steps:
-      # 0️⃣ Run only if today is 1st in IST (but skip when run manually)
-      - name: Check if IST date is 1st (Skip for manual run)
+      # 0️⃣ Run ONLY if today is LAST DAY of month in IST
+      # (Skip this check when manually triggered)
+      - name: Check if today is last day of month (IST)
         if: github.event_name != 'workflow_dispatch'
         run: |
-          IST_DATE=$(TZ="Asia/Kolkata" date +'%d')
-          echo "Current IST Date: $IST_DATE"
+          TODAY_IST=$(TZ="Asia/Kolkata" date +'%d')
+          TOMORROW_IST=$(TZ="Asia/Kolkata" date -d 'tomorrow' +'%d')
 
-          if [ "$IST_DATE" != "01" ]; then
-            echo "⛔ Not 1st of the month in IST. Stopping workflow."
+          echo "Today IST: $TODAY_IST"
+          echo "Tomorrow IST: $TOMORROW_IST"
+
+          if [ "$TOMORROW_IST" != "01" ]; then
+            echo "⛔ Today is NOT the last day of the month (IST). Stopping workflow."
             exit 1
           fi
+
+          echo "✅ Today is the LAST DAY of the month (IST). Continuing..."
 
       # 1️⃣ Checkout repository
       - name: Checkout repository
