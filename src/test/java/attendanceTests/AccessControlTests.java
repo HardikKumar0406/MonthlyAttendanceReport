@@ -34,7 +34,7 @@ public class AccessControlTests extends BaseTests {
 
         // Send email with attachment
         boolean emailSent = EmailSender.sendEmailWithAttachment(
-                "mukesh@peregrine-it.com",
+                "hardik040698@gmail.com",
                 null,
                 "Attendance Report",
                 "Please find the attached attendance report.",
