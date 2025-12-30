@@ -39,28 +39,13 @@ public class ExcelExporter {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     // ===================== ENV DETECTION =====================
-    /**
-     * GitHub Actions always sets GITHUB_ACTIONS=true
-     */
     private static final boolean IS_CLI_RUN =
             "true".equalsIgnoreCase(System.getenv("GITHUB_ACTIONS"));
 
     // ===================== TIME HANDLER =====================
-    /**
-     * Local run  → use time as-is
-     * CLI / CI   → add +5:30 hours
-     */
     private static LocalDateTime resolveTime(String accessTime) {
-
         LocalDateTime dt = LocalDateTime.parse(accessTime, INPUT_FORMAT);
-
-        if (IS_CLI_RUN) {
-            // Add IST offset (+5:30)
-            return dt.plusMinutes(330);
-        }
-
-        // Local run → no change
-        return dt;
+        return IS_CLI_RUN ? dt.plusMinutes(330) : dt;
     }
 
     // ===================== EXPORT METHOD =====================
@@ -68,7 +53,7 @@ public class ExcelExporter {
 
         try (Workbook workbook = new XSSFWorkbook()) {
 
-            // ---------- Fonts ----------
+            // ===================== STYLES =====================
             Font greenFont = workbook.createFont();
             greenFont.setBold(true);
             greenFont.setColor(IndexedColors.GREEN.getIndex());
@@ -81,8 +66,6 @@ public class ExcelExporter {
             redFont.setBold(true);
             redFont.setColor(IndexedColors.RED.getIndex());
 
-            Font defaultFont = workbook.createFont();
-
             CellStyle greenStyle = workbook.createCellStyle();
             greenStyle.setFont(greenFont);
 
@@ -92,21 +75,19 @@ public class ExcelExporter {
             CellStyle redStyle = workbook.createCellStyle();
             redStyle.setFont(redFont);
 
-            CellStyle defaultStyle = workbook.createCellStyle();
-            defaultStyle.setFont(defaultFont);
-
-            // ---------- Group records by DATE ----------
+            // ===================== GROUP BY DATE =====================
             Map<String, List<AttendanceRecord>> groupedByDate = new TreeMap<>();
 
             for (AttendanceRecord rec : records) {
                 LocalDateTime dt = resolveTime(rec.accessTime);
                 String dateKey = dt.toLocalDate().format(DATE_FORMAT);
-                groupedByDate
-                        .computeIfAbsent(dateKey, k -> new ArrayList<>())
-                        .add(rec);
+                groupedByDate.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(rec);
             }
 
-            // ---------- Create Sheets ----------
+            // ===================== GLOBAL LATE COUNTER =====================
+            Map<String, Integer> lateCountMap = new TreeMap<>();
+
+            // ===================== CREATE DATE SHEETS =====================
             for (Map.Entry<String, List<AttendanceRecord>> entry : groupedByDate.entrySet()) {
 
                 String date = entry.getKey();
@@ -114,7 +95,6 @@ public class ExcelExporter {
 
                 Sheet sheet = workbook.createSheet(date);
 
-                // Header
                 Row header = sheet.createRow(0);
                 header.createCell(0).setCellValue("First Name");
                 header.createCell(1).setCellValue("Last Name");
@@ -122,12 +102,9 @@ public class ExcelExporter {
                 header.createCell(3).setCellValue("Tag");
                 header.createCell(4).setCellValue("Attendance Status");
 
-                // Sort by resolved time
                 dayRecords.sort(Comparator.comparing(r -> resolveTime(r.accessTime)));
 
-                // Per-user ordering
                 Map<String, List<AttendanceRecord>> userMap = new HashMap<>();
-
                 for (AttendanceRecord rec : dayRecords) {
                     String key = rec.firstName.trim() + "_" + rec.lastName.trim();
                     userMap.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
@@ -135,13 +112,12 @@ public class ExcelExporter {
 
                 userMap.values()
                        .forEach(list ->
-                           list.sort(Comparator.comparing(r -> resolveTime(r.accessTime)))
+                               list.sort(Comparator.comparing(r -> resolveTime(r.accessTime)))
                        );
 
                 Map<String, Integer> userIndex = new HashMap<>();
                 int rowIndex = 1;
 
-                // ---------- Write Rows ----------
                 for (AttendanceRecord rec : dayRecords) {
 
                     String key = rec.firstName.trim() + "_" + rec.lastName.trim();
@@ -155,15 +131,16 @@ public class ExcelExporter {
 
                     if (index == 0) {
                         tag = "Clock-in";
-
                         LocalTime time = dt.toLocalTime();
-                        if (!time.isAfter(LocalTime.of(10, 0)))
-                            status = "On-time";
-                        else if (!time.isAfter(LocalTime.of(10, 15)))
-                            status = "Buffer Late";
-                        else
-                            status = "Late";
 
+                        if (!time.isAfter(LocalTime.of(10, 0))) {
+                            status = "On-time";
+                        } else if (!time.isAfter(LocalTime.of(10, 15))) {
+                            status = "Buffer Late";
+                        } else {
+                            status = "Late";
+                            lateCountMap.put(key, lateCountMap.getOrDefault(key, 0) + 1);
+                        }
                     } else {
                         tag = "Check-Out".equalsIgnoreCase(orderedRec.checkType)
                                 ? "Clock-out" : "Break";
@@ -178,29 +155,55 @@ public class ExcelExporter {
                     Cell statusCell = row.createCell(4);
                     statusCell.setCellValue(status);
 
-                    switch (status) {
-                        case "On-time":
-                            statusCell.setCellStyle(greenStyle);
-                            break;
-                        case "Buffer Late":
-                            statusCell.setCellStyle(orangeStyle);
-                            break;
-                        case "Late":
-                            statusCell.setCellStyle(redStyle);
-                            break;
-                        default:
-                            statusCell.setCellStyle(defaultStyle);
-                    }
+                    if ("On-time".equals(status)) statusCell.setCellStyle(greenStyle);
+                    else if ("Buffer Late".equals(status)) statusCell.setCellStyle(orangeStyle);
+                    else if ("Late".equals(status)) statusCell.setCellStyle(redStyle);
 
                     userIndex.put(key, index + 1);
                 }
 
-                for (int i = 0; i < 5; i++) {
-                    sheet.autoSizeColumn(i);
+                for (int i = 0; i < 5; i++) sheet.autoSizeColumn(i);
+            }
+
+            // ===================== SUMMARY SHEET =====================
+            Sheet summary = workbook.createSheet("Late Summary");
+
+            Row header = summary.createRow(0);
+            header.createCell(0).setCellValue("Name");
+            header.createCell(1).setCellValue("Late Count");
+
+            Set<String> allUsers = new TreeSet<>();
+            for (AttendanceRecord rec : records) {
+                allUsers.add(rec.firstName.trim() + "_" + rec.lastName.trim());
+            }
+
+            int r = 1;
+            for (String userKey : allUsers) {
+
+                Row row = summary.createRow(r++);
+                row.createCell(0).setCellValue(userKey.replace("_", " "));
+
+                int count = lateCountMap.getOrDefault(userKey, 0);
+                Cell lateCell = row.createCell(1);
+
+                if (count == 0) {
+                    lateCell.setCellValue("Always On Time");
+                    lateCell.setCellStyle(greenStyle);
+
+                } else if (count <= 2) {
+                    lateCell.setCellValue(count + " Times");
+                    lateCell.setCellStyle(orangeStyle);
+
+                } else {
+                    lateCell.setCellValue(count + " Times");
+                    lateCell.setCellStyle(redStyle);
                 }
             }
 
-            // ---------- Save File ----------
+            summary.autoSizeColumn(0);
+            summary.autoSizeColumn(1);
+
+            // ===================== SAVE FILE =====================
             File folder = new File(folderPath);
             if (!folder.exists()) folder.mkdirs();
 
@@ -212,10 +215,7 @@ public class ExcelExporter {
                 workbook.write(fos);
             }
 
-            System.out.println("✔ Excel created successfully"
-                    + (IS_CLI_RUN ? " (CLI +5:30 applied)" : " (Local run)")
-                    + ": " + filePath);
-
+            System.out.println("✔ Excel created successfully: " + filePath);
             return filePath;
 
         } catch (IOException e) {
